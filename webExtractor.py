@@ -1,5 +1,6 @@
 import json
 import re
+from time import sleep
 import requests
 import argparse
 from enum import Enum
@@ -8,10 +9,12 @@ from urllib.parse import urlparse
 
 urlsToScan = []
 urlsScanned = []
-urlExclusions = re.compile("^(http|https|#|//).*")
+urlExclusions = re.compile("^(\.|http|https|#|//).*")
 
 class Settings():
     outputVerbose = 0
+    outputFile = None
+    outputFileJson = None
     connectionParams = {}
     filters = []
 
@@ -26,9 +29,10 @@ class Settings():
         parser.add_argument("filter")
         parser.add_argument("-i","--ignore-cert",action="store_true", default=False)
         parser.add_argument("-f","--follow-redirect",action="store_true", default=False)
-        parser.add_argument("-o")
-        parser.add_argument("-oj")
+        parser.add_argument("-o","--output")
+        parser.add_argument("-oj","--output-json")
         parser.add_argument("-t","--timeout",type=int, default=5000)
+        parser.add_argument("-w","--wait",type=int, default=100)
         parser.add_argument("-H","--header", type=str, action="append", nargs="+")
         parser.add_argument("-C","--cookie", type=str, action="append", nargs="+")
         parser.add_argument("-v",action="store_true")
@@ -42,12 +46,16 @@ class Settings():
         else:
             self.outputVerbose = self.VerboseLevels.NONE
 
+        self.outputFile = args["output"]
+        self.outputFileJson = args["output_json"]
+
         self.filters = args["filter"].split(",")
         
         urlParamList = self._parseUrl(args["url"])
         self.connectionParams["url"] = urlParamList[0]
         self.connectionParams["domain"] = urlParamList[1]
         self.connectionParams["timeout"] = args["timeout"]
+        self.connectionParams["wait"] = args["wait"] / 1000
         self.connectionParams["verifyCert"] = not args["ignore_cert"]
         self.connectionParams["followRedirect"] = args["follow_redirect"]
         self.connectionParams["headers"] = self._parseMultiValueParam(args["header"],":")
@@ -73,36 +81,55 @@ class Settings():
 
     def getVerboseLevel(self):
         return self.verboseLevel
-    
-    def isHighVerbose(self):
-        return self.verboseLevel == 2
-    
-    def isVerbose(self):
-        return self.verboseLevel == 1
+
+class OutputManager():
+    verboseLevel = Settings.VerboseLevels.NONE
+    file = None
+    fileJson = None
+    jsonData = {}
+
+    def __init__(self, settings):
+        outFilePath = settings.outputFile
+        outFileJsonPath = settings.outputFileJson
+        
+        if outFilePath:
+            self.file = open(outFilePath,"w")
+        if outFileJsonPath:
+            self.fileJson = open(outFileJsonPath,"w")
+
+        self.verboseLevel = settings.outputVerbose
+
+    def printMatches(self, results, currentUrl):
+        if results:
+            resultIsTag = isinstance(results[0],Tag)
+            for element in results:
+                outStr = ""
+
+                if element:
+                    if resultIsTag:
+                        outStr = element.prettify()
+                    else:
+                        outStr = element
+
+                    if self.verboseLevel is Settings.VerboseLevels.LOW or self.verboseLevel is Settings.VerboseLevels.HIGH:
+                        outStr = currentUrl + ": " + outStr
 
 
+                self.print(outStr.strip())
 
-def printResults(resultList, url):
-    if resultList:
-        resultIsTag = isinstance(resultList[0],Tag)
-        for element in resultList:
-            elem = element
-            
-            if resultIsTag:
-                elem = element.text
+                if self.fileJson:
+                    self.jsonData[currentUrl] = results
 
-            print(elem)
 
-            if destFile:
-                destFile.write(elem)
+    def print(self, strIn):
+        print(strIn)
 
-def printJSONFile(resultList, url, destFile):
-    jsonDict = {
-        "url": url,
-        "results": resultList
-    }
+        if self.file:
+            self.file.write(strIn+"\n")
 
-    destFile.write(json.dumps(jsonDict))
+    def writeJsonFile(self):
+        if self.fileJson:
+            json.dump(self.jsonData,self.fileJson)
 
 
 def findElements(elementsList,soup):
@@ -125,10 +152,11 @@ def findElements(elementsList,soup):
 def getNextPages(soup,domain,currentUrl):
     for link in soup.find_all("a"):
         path = link.get("href")
-        if path:
-            if not urlExclusions.match(path):
+        if path and not urlExclusions.match(path):
                 if path.startswith("/"):
                     path = domain+path
+                else:
+                    path = domain+"/"+path
                 urlsToScan.append(path)
     urlsToScan.pop(0)
     urlsScanned.append(currentUrl)
@@ -137,21 +165,14 @@ def getNextPages(soup,domain,currentUrl):
 
 if __name__== "__main__":
     s = Settings()
-
-    verifyCert = True
-    printResultUrl= True
-    destFile = None
+    om = OutputManager(s)
 
     domain = s.connectionParams["domain"]
     urlsToScan.append(s.connectionParams["url"])
     file = None
 
-    if destFile:
-        file = open(destFile,"w")
-
     for url in urlsToScan:
         if url not in urlsScanned:
-            print(url)
             r = requests.get(
                              url,
                              verify=s.connectionParams["verifyCert"],
@@ -160,9 +181,11 @@ if __name__== "__main__":
                              timeout=s.connectionParams["timeout"],
                              allow_redirects=s.connectionParams["followRedirect"]
                              )
+            sleep(s.connectionParams["wait"])
             if(r.status_code == 200):
                 soup = BeautifulSoup(r.text,"html.parser")
-                printResults(findElements(s.filters,soup),url)
+                om.printMatches(findElements(s.filters,soup),url)
                 getNextPages(soup,domain,url)
-            else:
-                print(r.status_code)
+            elif s.outputVerbose == Settings.VerboseLevels.HIGH:
+                om.print("The request for url {} returned code {}".format(url,r.status_code))
+    om.writeJsonFile()

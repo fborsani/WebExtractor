@@ -13,6 +13,7 @@ urlExclusions = re.compile("^(\.|http|https|#|//).*")
 
 class Settings():
     outputVerbose = 0
+    depthLimit = -1
     outputFile = None
     outputFileJson = None
     connectionParams = {}
@@ -27,16 +28,17 @@ class Settings():
         parser = argparse.ArgumentParser(description='Crawl and extract text from a website')
         parser.add_argument("url")
         parser.add_argument("filter")
-        parser.add_argument("-i","--ignore-cert",action="store_true", default=False)
-        parser.add_argument("-f","--follow-redirect",action="store_true", default=False)
-        parser.add_argument("-o","--output")
-        parser.add_argument("-oj","--output-json")
-        parser.add_argument("-t","--timeout",type=int, default=5000)
-        parser.add_argument("-w","--wait",type=int, default=100)
-        parser.add_argument("-H","--header", type=str, action="append", nargs="+")
-        parser.add_argument("-C","--cookie", type=str, action="append", nargs="+")
-        parser.add_argument("-v",action="store_true")
-        parser.add_argument("-vv",action="store_true")
+        parser.add_argument("-i","--ignore-cert",action="store_true", default=False, help="Don't validate certificates when executing HTTPS requests")
+        parser.add_argument("-f","--follow-redirect",action="store_true", default=False, help="Follow redirects when receiving 30X responses")
+        parser.add_argument("-d","--max-depth", type=int, default=-1, help="When specified indicates the max number to pages to crawl from the starting point. Special values are 0 to parse only the specified url and -1 for no limits")
+        parser.add_argument("-o","--output", help="Path to output file")
+        parser.add_argument("-oj","--output-json", help="Path to JSON output file")
+        parser.add_argument("-t","--timeout",type=int, default=5000, help="Request timeout")
+        parser.add_argument("-w","--wait",type=int, default=100, help="Time to wait between requests")
+        parser.add_argument("-H","--header", type=str, action="append", nargs="+", help="Specify one or more HTTP headers in the format <name>:<value>")
+        parser.add_argument("-C","--cookie", type=str, action="append", nargs="+", help="Specify one or more cookies in the format <name>=<value>")
+        parser.add_argument("-v",action="store_true", help="Print additional information")
+        parser.add_argument("-vv",action="store_true", help="Print debug information about requests performed")
         args = vars(parser.parse_args())
 
         if args["vv"]:
@@ -45,6 +47,9 @@ class Settings():
             self.outputVerbose = self.VerboseLevels.LOW
         else:
             self.outputVerbose = self.VerboseLevels.NONE
+
+        if args["max_depth"]:
+            self.depthLimit = args["max_depth"]
 
         self.outputFile = args["output"]
         self.outputFileJson = args["output_json"]

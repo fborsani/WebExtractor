@@ -102,25 +102,27 @@ class OutputManager():
 
     def printMatches(self, results, currentUrl):
         if results:
-            resultIsTag = isinstance(results[0],Tag)
             for element in results:
                 outStr = ""
 
                 if element:
-                    if resultIsTag:
+                    if isinstance(results[0], Tag):
                         outStr = element.prettify()
+                    elif isinstance(results[0], list):
+                        outStr = ",".join("\'"+str(i)+"\'" for i in element)
                     else:
-                        outStr = element
+                        if isinstance(element, list):
+                            outStr = ",".join("\'"+str(i)+"\'" for i in element)
+                        else:
+                            outStr = element
 
                     if self.verboseLevel is Settings.VerboseLevels.LOW or self.verboseLevel is Settings.VerboseLevels.HIGH:
                         outStr = currentUrl + ": " + outStr
 
+                    self.print(outStr.strip())
 
-                self.print(outStr.strip())
-
-                if self.fileJson:
-                    self.jsonData[currentUrl] = results
-
+                    if self.fileJson:
+                        self.jsonData[currentUrl] = results
 
     def print(self, strIn):
         print(strIn)

@@ -162,7 +162,6 @@ class Crawler():
         
         for link in self.parserLinks.parse(url):
             currUrl = link.get("href")
-            print(url+" - "+str(currentDepth)+"/"+str(self.maxDepth))
             if currUrl and not self.urlExclusions.match(currUrl) and currUrl not in self.urlsScanned:
                 if currUrl.startswith("/"):
                     fpath = self.domain+currUrl
@@ -226,5 +225,4 @@ class Parser():
 if __name__== "__main__":
     s = Settings()
     c = Crawler(s, Parser(s, om=OutputManager(s)))
-    #c = Crawler(s, Parser(s, om=None))
     c.crawl()

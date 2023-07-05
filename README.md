@@ -1,5 +1,6 @@
 # WebExtractor
 A tool written in python 3 designed to crawl a website and extract tags, text, comments and properties from the HTML code.
+Uses the requests library to retireve the pages and Beatifulsoup to parse the page source code and extract the requested elements. The results can be stored as plaintext or in JSON format
 
 ## Usage
 
